@@ -89,8 +89,17 @@ class DataLoaderDisk(object):
         labels_batch = np.zeros((batch_size, self.fine_size, self.fine_size, 3))
 
         for i in range(batch_size):
+
             file_name = 'lamem/images/{0:0>8}.jpg'.format(self._idx + 1)
             image = scipy.misc.imread(file_name)
+
+            while len(image.shape) != 3:
+                self._idx += 1
+                if self._idx == self.num:
+                    self._idx = 0
+
+                file_name = 'lamem/images/{0:0>8}.jpg'.format(self._idx + 1)
+                image = scipy.misc.imread(file_name)
 
             size_h = self.load_size
             size_w = self.load_size

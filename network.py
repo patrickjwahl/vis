@@ -5,7 +5,7 @@ from tensorflow.contrib.layers.python.layers import batch_norm
 from DataLoader import *
 
 # Dataset Parameters
-batch_size = 3
+batch_size = 2
 load_size = 331
 fine_size = 299
 c = 1
@@ -297,7 +297,7 @@ learning_rate = tf.train.exponential_decay(learning_rate_initial, global_step, d
 loss1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,0], [batch_size, fine_size, fine_size, 1])), logits=logitsR))
 loss2 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,1], [batch_size, fine_size, fine_size, 1])), logits=logitsG))
 loss3 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,2], [batch_size, fine_size, fine_size, 1])), logits=logitsB))
-loss = tf.add(loss1, tf.add(loss2, loss3))
+loss = loss1+loss2+loss3
 train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
 # define initialization
