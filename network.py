@@ -279,7 +279,7 @@ loader_val = DataLoaderDisk(**opt_data_val)
 x = tf.placeholder(tf.float32, [batch_size, fine_size, fine_size, c])
 
 def binner(image):
-    return tf.cast(tf.floor(tf.scalar_mul(tf.constant(50, dtype=tf.float32), image)), tf.int64)
+    return tf.cast(tf.floor(tf.scalar_mul(tf.constant(49.9999, dtype=tf.float32), image)), tf.int64)
 
 y = tf.placeholder(tf.float32, [batch_size, fine_size, fine_size, 3])
 actual_y = binner(y)
@@ -297,7 +297,7 @@ learning_rate = tf.train.exponential_decay(learning_rate_initial, global_step, d
 loss1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,0], [batch_size, fine_size, fine_size, 1])), logits=logitsR))
 loss2 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,1], [batch_size, fine_size, fine_size, 1])), logits=logitsG))
 loss3 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,2], [batch_size, fine_size, fine_size, 1])), logits=logitsB))
-loss = loss1 + loss2 + loss3
+loss = tf.add(loss1, tf.add(loss2, loss3))
 train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
 # define initialization
@@ -332,7 +332,7 @@ with tf.Session(config=config) as sess:
 
             # Calculate batch loss and accuracy on training set
             l = sess.run([loss], feed_dict={x: images_batch, y: labels_batch, keep_dropout: 1., train_phase: False}) 
-            print("-Iter " + str(step) + ", Training Loss= " + "{:.6f}".format(l)) 
+            print("-Iter " + str(step) + ", Training Loss= " + "{0}".format(l)) 
 
             # stat_file = open('stat_file.txt', 'a')
             # stat_file.write("{:.6f}\n".format(l))

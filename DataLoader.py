@@ -107,7 +107,6 @@ class DataLoaderDisk(object):
                 image = scipy.misc.imresize(image, (self.load_size, self.load_size))
 
             image = image.astype(np.float32)/255.
-            image = image - self.data_mean
             if self.randomize:
                 offset_h = np.random.random_integers(0, size_h-self.fine_size)
                 offset_w = np.random.random_integers(0, size_w-self.fine_size)
