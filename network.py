@@ -8,7 +8,7 @@ from DataLoader import *
 batch_size = 25
 load_size = 331
 fine_size = 299
-c = 3
+c = 1
 data_mean = np.asarray([0.45834960097,0.44674252445,0.41352266842])
 
 # Training Parameters
@@ -75,11 +75,15 @@ def fun_net(x, keep_dropout, train_phase):
         'wsc12d': tf.Variable(tf.random_normal([3, 3, 1536, 1], stddev=np.sqrt(2./(3*3*1536)))),
         'wsc12p': tf.Variable(tf.random_normal([1, 1, 1536, 2048], stddev=np.sqrt(2./(1*1*1536)))),
 
-        'wo': tf.Variable(tf.random_normal([2048, 100], stddev=np.sqrt(2./2048)))
+        'wct13': tf.Variable(tf.random_normal([3, 3, 1024, 2048], stddev=np.sqrt(2./(1*1*2048)))),
+        'wct14': tf.Variable(tf.random_normal([3, 3, 512, 1024], stddev=np.sqrt(2./(1*1*1024)))),
+        'wct15': tf.Variable(tf.random_normal([3, 3, 50, 512], stddev=np.sqrt(2./(1*1*512))))
     }
 
     biases = {
-        'bo': tf.Variable(tf.ones(100))
+        'ba': tf.Variable(tf.ones([299, 299, 50])),
+        'bb': tf.Variable(tf.ones([299, 299, 50])),
+        'bc': tf.Variable(tf.ones([299, 299, 50]))
     }
 
 
@@ -214,13 +218,19 @@ def fun_net(x, keep_dropout, train_phase):
     conv12 = batch_norm_layer(conv12, train_phase, 'bn12')
     conv12 = tf.nn.relu(conv12)
 
-    dense = tf.reduce_mean(conv12, [1, 2])
-    # dense = tf.matmul(dense, weights['wf'])
-    # dense = batch_norm_layer(dense, train_phase, 'd')
-    # dense = tf.nn.relu(dense)
-    dense = tf.nn.dropout(dense, keep_dropout)
+    #Transpose convs start
 
-    out = tf.add(tf.matmul(dense, weights['wo']), biases['bo'])
+    conv13 = tf.nn.conv2d_transpose(conv12, weights['wct13'], output_size=[batch_size, 100, 100, 1024], strides=[1, 1, 1, 1], padding='SAME')
+    conv14 = tf.nn.conv2d_transpose(conv13, weights['wct14'], output_size=[batch_size, 200, 200, 512], strides=[1, 1, 1, 1], padding='SAME')
+    conv15a = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
+    conv15b = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
+    conv15c = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
+
+    conv15a = tf.nn.dropout(conv15a, keep_dropout)
+    conv15b = tf.nn.dropout(conv15b, keep_dropout)
+    conv15c = tf.nn.dropout(conv15c, keep_dropout)
+
+    outA, outB, outC = tf.add(conv15a, biases['ba']), tf.add(conv15b, biases['bb']), tf.add(conv15c, biases['bc'])
 
     vars = 0
     for v in tf.global_variables():
@@ -228,7 +238,7 @@ def fun_net(x, keep_dropout, train_phase):
 
     print vars 
 
-    return out
+    return outA, outB, outC
 
 # Construct dataloader
 opt_data_train = {
@@ -264,7 +274,7 @@ keep_dropout = tf.placeholder(tf.float32)
 train_phase = tf.placeholder(tf.bool)
 
 # Construct model
-logits = fun_net(x, keep_dropout, train_phase)
+logitsR, logitsG, logitsB = fun_net(x, keep_dropout, train_phase)
 
 # Define learning rate
 global_step = tf.Variable(0, trainable=False)
