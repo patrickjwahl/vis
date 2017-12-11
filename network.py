@@ -19,9 +19,9 @@ decay_steps = int(200000/batch_size)
 dropout = 0.5 # Dropout, probability to keep units
 training_iters = 50000
 step_display = 50
-step_save = 1000
-path_save = 'fun_fun_3'
-start_from = 'fun_fun_3-42000'
+step_save = 5000
+path_save = 'vis'
+start_from = ''
 
 def batch_norm_layer(x, train_phase, scope_bn):
     return batch_norm(x, decay=0.9, center=True, scale=True,
@@ -269,7 +269,10 @@ loader_val = DataLoaderDisk(**opt_data_val)
 
 # tf Graph input
 x = tf.placeholder(tf.float32, [None, fine_size, fine_size, c])
-y = tf.placeholder(tf.int64, None)
+def bin(image):
+    return tf.cast(tf.floor(tf.scalar_mul(tf.constant(50), image)), tf.int64)
+y = tf.placeholder(tf.float32, [None, fine_size, fine_size, 3])
+actual_y = bin(y)
 keep_dropout = tf.placeholder(tf.float32)
 train_phase = tf.placeholder(tf.bool)
 
@@ -281,12 +284,10 @@ global_step = tf.Variable(0, trainable=False)
 learning_rate = tf.train.exponential_decay(learning_rate_initial, global_step, decay_steps, learning_rate_decay, staircase=True)
 
 # Define loss and optimizer
-loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=logits))
-train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
-
-# Evaluate model
-accuracy1 = tf.reduce_mean(tf.cast(tf.nn.in_top_k(logits, y, 1), tf.float32))
-accuracy5 = tf.reduce_mean(tf.cast(tf.nn.in_top_k(logits, y, 5), tf.float32))
+loss1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,0], [batch_size, fine_size, fine_size, 1], logits=logitsR))
+loss2 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,1], [batch_size, fine_size, fine_size, 1], logits=logitsG))
+loss3 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,2], [batch_size, fine_size, fine_size, 1], logits=logitsB))
+train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss1+loss2+loss3, global_step=global_step)
 
 # define initialization
 init = tf.global_variables_initializer()
@@ -309,7 +310,7 @@ with tf.Session(config=config) as sess:
     else:
         sess.run(init)
     
-    step = 50000
+    step = 0
 
     while step < training_iters:
         # Load a batch of training data
@@ -319,19 +320,15 @@ with tf.Session(config=config) as sess:
             print('[%s]:' %(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
             # Calculate batch loss and accuracy on training set
-            l, acc1, acc5 = sess.run([loss, accuracy1, accuracy5], feed_dict={x: images_batch, y: labels_batch, keep_dropout: 1., train_phase: False}) 
+            l = sess.run([loss], feed_dict={x: images_batch, y: labels_batch, keep_dropout: 1., train_phase: False}) 
             print("-Iter " + str(step) + ", Training Loss= " + \
-                  "{:.6f}".format(l) + ", Accuracy Top1 = " + \
-                  "{:.4f}".format(acc1) + ", Top5 = " + \
-                  "{:.4f}".format(acc5))
-
+                  "{:.6f}".format(l) 
+                  
             # Calculate batch loss and accuracy on validation set
             images_batch_val, labels_batch_val = loader_val.next_batch(batch_size)    
-            l, acc1, acc5 = sess.run([loss, accuracy1, accuracy5], feed_dict={x: images_batch_val, y: labels_batch_val, keep_dropout: 1., train_phase: False}) 
+            l = sess.run([loss], feed_dict={x: images_batch_val, y: labels_batch_val, keep_dropout: 1., train_phase: False}) 
             print("-Iter " + str(step) + ", Validation Loss= " + \
-                  "{:.6f}".format(l) + ", Accuracy Top1 = " + \
-                  "{:.4f}".format(acc1) + ", Top5 = " + \
-                  "{:.4f}".format(acc5))
+                  "{:.6f}".format(l) 
 
             # stat_file = open('stat_file.txt', 'a')
             # stat_file.write("{:.6f}\n".format(l))
@@ -348,23 +345,3 @@ with tf.Session(config=config) as sess:
             print("Model saved at Iter %d !" %(step))
         
     print("Optimization Finished!")
-
-
-    # Evaluate on the whole validation set
-    print('Evaluation on the whole validation set...')
-    num_batch = loader_val.size()//batch_size
-    acc1_total = 0.
-    acc5_total = 0.
-    loader_val.reset()
-    for i in range(num_batch):
-        images_batch, labels_batch = loader_val.next_batch(batch_size)    
-        acc1, acc5 = sess.run([accuracy1, accuracy5], feed_dict={x: images_batch, y: labels_batch, keep_dropout: 1., train_phase: False})
-        acc1_total += acc1
-        acc5_total += acc5
-        print("Validation Accuracy Top1 = " + \
-              "{:.4f}".format(acc1) + ", Top5 = " + \
-              "{:.4f}".format(acc5))
-
-    acc1_total /= num_batch
-    acc5_total /= num_batch
-    print('Evaluation Finished! Accuracy Top1 = ' + "{:.4f}".format(acc1_total) + ", Top5 = " + "{:.4f}".format(acc5_total))
