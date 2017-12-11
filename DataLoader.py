@@ -4,7 +4,6 @@ import scipy.misc
 import scipy.ndimage
 import skimage.color as ski
 import h5py
-from radial_augment import RadialAugmenter
 np.random.seed(123)
 
 # loading data from .h5
@@ -121,9 +120,9 @@ class DataLoaderDisk(object):
 
             color_image = image[offset_h:offset_h+self.fine_size, offset_w:offset_w+self.fine_size, :]
 
-            bw_im = ski.rgb2gray(image)
+            bw_im = ski.rgb2gray(color_image)
 
-            images_batch[i, ...] = bw_im
+            images_batch[i, :, :, 0] = bw_im
 
             if not self.test:
                 labels_batch[i, ...] = color_image

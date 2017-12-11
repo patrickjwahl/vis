@@ -5,7 +5,7 @@ from tensorflow.contrib.layers.python.layers import batch_norm
 from DataLoader import *
 
 # Dataset Parameters
-batch_size = 25
+batch_size = 3
 load_size = 331
 fine_size = 299
 c = 1
@@ -77,7 +77,12 @@ def fun_net(x, keep_dropout, train_phase):
 
         'wct13': tf.Variable(tf.random_normal([3, 3, 1024, 2048], stddev=np.sqrt(2./(1*1*2048)))),
         'wct14': tf.Variable(tf.random_normal([3, 3, 512, 1024], stddev=np.sqrt(2./(1*1*1024)))),
-        'wct15': tf.Variable(tf.random_normal([3, 3, 50, 512], stddev=np.sqrt(2./(1*1*512))))
+        'wct15': tf.Variable(tf.random_normal([3, 3, 256, 512], stddev=np.sqrt(2./(1*1*512)))),
+
+        'wct16a': tf.Variable(tf.random_normal([2, 2, 256, 50], stddev=np.sqrt(2./(1*1*256)))),
+        'wct16b': tf.Variable(tf.random_normal([2, 2, 256, 50], stddev=np.sqrt(2./(1*1*256)))),
+        'wct16c': tf.Variable(tf.random_normal([2, 2, 256, 50], stddev=np.sqrt(2./(1*1*256))))
+
     }
 
     biases = {
@@ -105,10 +110,6 @@ def fun_net(x, keep_dropout, train_phase):
         weights[pointwise2] = tf.Variable(tf.random_normal([1, 1, 728, 728], stddev=np.sqrt(2./(1*1*728))))
         weights[pointwise3] = tf.Variable(tf.random_normal([1, 1, 728, 728], stddev=np.sqrt(2./(1*1*728))))
 
-
-    biases = {
-        'bo': tf.Variable(tf.ones(100))
-    }
 
     # Entry flow ====================================================================================================================
 
@@ -220,17 +221,24 @@ def fun_net(x, keep_dropout, train_phase):
 
     #Transpose convs start
 
-    conv13 = tf.nn.conv2d_transpose(conv12, weights['wct13'], output_size=[batch_size, 100, 100, 1024], strides=[1, 1, 1, 1], padding='SAME')
-    conv14 = tf.nn.conv2d_transpose(conv13, weights['wct14'], output_size=[batch_size, 200, 200, 512], strides=[1, 1, 1, 1], padding='SAME')
-    conv15a = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
-    conv15b = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
-    conv15c = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_size=[batch_size, 299, 299, 50], strides=[1, 1, 1, 1], padding='SAME')
+    conv13 = tf.nn.conv2d_transpose(conv12, weights['wct13'], output_shape=[batch_size, 50, 50, 1024], strides=[1, 5, 5, 1], padding='SAME')
+    conv13 = batch_norm_layer(conv13, train_phase, 'bn13')
+    conv13 = tf.nn.relu(conv13)
+    conv14 = tf.nn.conv2d_transpose(conv13, weights['wct14'], output_shape=[batch_size, 150, 150, 512], strides=[1, 3, 3, 1], padding='SAME')
+    conv14 = batch_norm_layer(conv14, train_phase, 'bn14')
+    conv14 = tf.nn.relu(conv14)
+    conv15 = tf.nn.conv2d_transpose(conv14, weights['wct15'], output_shape=[batch_size, 300, 300, 256], strides=[1, 2, 2, 1], padding='SAME')
+    conv15 = batch_norm_layer(conv15, train_phase, 'bn15')
+    conv15 = tf.nn.relu(conv15)
+    conv16a = tf.nn.conv2d(conv15, weights['wct16a'], strides=[1, 1, 1, 1], padding='VALID')
+    conv16b = tf.nn.conv2d(conv15, weights['wct16b'], strides=[1, 1, 1, 1], padding='VALID')
+    conv16c = tf.nn.conv2d(conv15, weights['wct16c'], strides=[1, 1, 1, 1], padding='VALID')
 
-    conv15a = tf.nn.dropout(conv15a, keep_dropout)
-    conv15b = tf.nn.dropout(conv15b, keep_dropout)
-    conv15c = tf.nn.dropout(conv15c, keep_dropout)
+    conv17a = tf.nn.dropout(conv16a, keep_dropout)
+    conv17b = tf.nn.dropout(conv16b, keep_dropout)
+    conv17c = tf.nn.dropout(conv16c, keep_dropout)
 
-    outA, outB, outC = tf.add(conv15a, biases['ba']), tf.add(conv15b, biases['bb']), tf.add(conv15c, biases['bc'])
+    outA, outB, outC = tf.add(conv17a, biases['ba']), tf.add(conv17b, biases['bb']), tf.add(conv17c, biases['bc'])
 
     vars = 0
     for v in tf.global_variables():
@@ -268,11 +276,13 @@ loader_val = DataLoaderDisk(**opt_data_val)
 #loader_val = DataLoaderH5(**opt_data_val)
 
 # tf Graph input
-x = tf.placeholder(tf.float32, [None, fine_size, fine_size, c])
-def bin(image):
-    return tf.cast(tf.floor(tf.scalar_mul(tf.constant(50), image)), tf.int64)
-y = tf.placeholder(tf.float32, [None, fine_size, fine_size, 3])
-actual_y = bin(y)
+x = tf.placeholder(tf.float32, [batch_size, fine_size, fine_size, c])
+
+def binner(image):
+    return tf.cast(tf.floor(tf.scalar_mul(tf.constant(50, dtype=tf.float32), image)), tf.int64)
+
+y = tf.placeholder(tf.float32, [batch_size, fine_size, fine_size, 3])
+actual_y = binner(y)
 keep_dropout = tf.placeholder(tf.float32)
 train_phase = tf.placeholder(tf.bool)
 
@@ -284,10 +294,11 @@ global_step = tf.Variable(0, trainable=False)
 learning_rate = tf.train.exponential_decay(learning_rate_initial, global_step, decay_steps, learning_rate_decay, staircase=True)
 
 # Define loss and optimizer
-loss1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,0], [batch_size, fine_size, fine_size, 1], logits=logitsR))
-loss2 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,1], [batch_size, fine_size, fine_size, 1], logits=logitsG))
-loss3 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.slice(actual_y, [0,0,0,2], [batch_size, fine_size, fine_size, 1], logits=logitsB))
-train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss1+loss2+loss3, global_step=global_step)
+loss1 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,0], [batch_size, fine_size, fine_size, 1])), logits=logitsR))
+loss2 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,1], [batch_size, fine_size, fine_size, 1])), logits=logitsG))
+loss3 = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=tf.squeeze(tf.slice(actual_y, [0,0,0,2], [batch_size, fine_size, fine_size, 1])), logits=logitsB))
+loss = loss1 + loss2 + loss3
+train_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
 # define initialization
 init = tf.global_variables_initializer()
@@ -321,21 +332,14 @@ with tf.Session(config=config) as sess:
 
             # Calculate batch loss and accuracy on training set
             l = sess.run([loss], feed_dict={x: images_batch, y: labels_batch, keep_dropout: 1., train_phase: False}) 
-            print("-Iter " + str(step) + ", Training Loss= " + \
-                  "{:.6f}".format(l) 
-                  
-            # Calculate batch loss and accuracy on validation set
-            images_batch_val, labels_batch_val = loader_val.next_batch(batch_size)    
-            l = sess.run([loss], feed_dict={x: images_batch_val, y: labels_batch_val, keep_dropout: 1., train_phase: False}) 
-            print("-Iter " + str(step) + ", Validation Loss= " + \
-                  "{:.6f}".format(l) 
+            print("-Iter " + str(step) + ", Training Loss= " + "{:.6f}".format(l)) 
 
             # stat_file = open('stat_file.txt', 'a')
             # stat_file.write("{:.6f}\n".format(l))
             # stat_file.close()
         
         # Run optimization op (backprop)
-        sess.run(train_optimizer, feed_dict={x: images_batch, y: labels_batch, keep_dropout: dropout, train_phase: True})
+        sess.run(train_optimizer, feed_dict={x:images_batch,y:labels_batch,keep_dropout:dropout,train_phase:True})
         
         step += 1
         
